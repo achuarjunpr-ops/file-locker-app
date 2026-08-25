@@ -26,6 +26,13 @@ jobs:
       - name: Create Android Template
         run: flutter create --platforms=android --org com.filelocker.app .
 
+      - name: Fix Android SDK Versions
+        run: |
+          find android/app -name "build.gradle*" -exec sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/g' {} +
+          find android/app -name "build.gradle*" -exec sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' {} +
+          find android/app -name "build.gradle*" -exec sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' {} +
+          find android/app -name "build.gradle*" -exec sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' {} +
+
       - name: Install Dependencies
         run: flutter pub get
 
