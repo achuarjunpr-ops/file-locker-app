@@ -107,7 +107,7 @@ class _LockerHomePageState extends State<LockerHomePage> {
           iv: enc.IV(Uint8List.fromList(ivBytes)),
         );
         processedData = decrypted;
-        newFileName = selectedFileName!.replaceAll("LOCKED", "").replaceAll(".enc", "");
+        newFileName = _selectedFileName!.replaceAll("LOCKED", "").replaceAll(".enc", "");
         if (!newFileName.contains('.')) newFileName = "UNLOCKED_$newFileName";
       }
 
