@@ -23,6 +23,9 @@ jobs:
         with:
           channel: 'stable'
 
+      - name: Create Android Template
+        run: flutter create --platforms=android --org com.filelocker.app .
+
       - name: Install Dependencies
         run: flutter pub get
 
