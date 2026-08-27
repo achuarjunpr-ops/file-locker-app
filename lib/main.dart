@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:encrypt/encrypt.dart' as enc;
 import 'package:share_plus/share_plus.dart';
+import 'package:local_auth/local_auth.dart';
 
 void main() {
   runApp(const FileLockerApp());
@@ -18,84 +19,104 @@ class FileLockerApp extends StatelessWidget {
     return MaterialApp(
       title: 'File Locker',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.indigo),
-      home: const LockerHomePage(),
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0F172A),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF6366F1),
+          secondary: Color(0xFF10B981),
+        ),
+      ),
+      home: const LockerScreen(),
     );
   }
 }
 
-class LockerHomePage extends StatefulWidget {
-  const LockerHomePage({super.key});
+class LockerScreen extends StatefulWidget {
+  const LockerScreen({super.key});
 
   @override
-  State<LockerHomePage> createState() => _LockerHomePageState();
+  State<LockerScreen> createState() => _LockerScreenState();
 }
 
-class _LockerHomePageState extends State<LockerHomePage> {
-  File? _selectedFile;
-  String? _selectedFileName;
+class _LockerScreenState extends State<LockerScreen> {
   final TextEditingController _passwordController = TextEditingController();
-  bool _isLoading = false;
+  final LocalAuthentication auth = LocalAuthentication();
+  String? _selectedFilePath;
+  String? _selectedFileName;
   String? _lastSavedFilePath;
+  bool _isLoading = false;
+
+  Future<bool> _authenticateUser() async {
+    try {
+      final bool canAuthenticate = await auth.canCheckBiometrics || await auth.isDeviceSupported();
+      if (!canAuthenticate) return true;
+
+      return await auth.authenticate(
+        localizedReason: 'Fingerprint വെരിഫൈ ചെയ്യുക',
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: false,
+        ),
+      );
+    } catch (e) {
+      return true; // ഫിംഗർപ്രിന്റ് ലഭ്യമല്ലെങ്കിൽ പാസ്‌വേഡ് വഴി തുടരാം
+    }
+  }
 
   Future<void> _pickFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
     if (result != null && result.files.single.path != null) {
       setState(() {
-        _selectedFile = File(result.files.single.path!);
+        _selectedFilePath = result.files.single.path!;
         _selectedFileName = result.files.single.name;
         _lastSavedFilePath = null;
       });
     }
   }
 
-  Future<Directory> _getPublicDirectory() async {
-    Directory? dir;
-    if (Platform.isAndroid) {
-      dir = Directory('/storage/emulated/0/Download');
-      if (!await dir.exists()) {
-        dir = await getExternalStorageDirectory();
-      }
-    } else {
-      dir = await getApplicationDocumentsDirectory();
-    }
-    return dir!;
-  }
-
-  enc.Key _deriveKey(String password) {
-    String padded = password.padRight(32, '0').substring(0, 32);
-    return enc.Key.fromUtf8(padded);
-  }
-
-  Future<void> _processFile({required bool isEncrypt}) async {
-    if (_selectedFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ആദ്യം ഒരു ഫയൽ തിരഞ്ഞെടുക്കുക!')),
-      );
+  Future<void> _processFile(bool isEncrypt) async {
+    if (_selectedFilePath == null) {
+      _showSnackBar('ആദ്യം ഒരു ഫയൽ തിരഞ്ഞെടുക്കുക!');
       return;
     }
 
-    String password = _passwordController.text.trim();
-    if (password.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('പാസ്‌വേഡിൽ കുറഞ്ഞത് 4 അക്ഷരങ്ങൾ വേണം!')),
-      );
+    if (_passwordController.text.length < 4) {
+      _showSnackBar('കുറഞ്ഞത് 4 അക്ക പാസ്‌വേഡ് നൽകുക!');
+      return;
+    }
+
+    // Biometric Authentication
+    bool authenticated = await _authenticateUser();
+    if (!authenticated) {
+      _showSnackBar('Authentication പരാജയപ്പെട്ടു!');
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      final bytes = await _selectedFile!.readAsBytes();
-      final key = _deriveKey(password);
-      final iv = enc.IV.fromLength(16);
-      final encrypter = enc.Encrypter(enc.AES(key));
+      final keyString = _passwordController.text.padRight(32, '*').substring(0, 32);
+      final key = enc.Key.fromUtf8(keyString);
+      final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
 
-      final outputDir = await _getPublicDirectory();
+      final file = File(_selectedFilePath!);
+      final bytes = await file.readAsBytes();
+
+      Uint8List processedData;
       String newFileName;
-      List<int> processedData;
+
+      Directory? outputDir;
+      if (Platform.isAndroid) {
+        outputDir = Directory('/storage/emulated/0/Download');
+        if (!await outputDir.exists()) {
+          outputDir = await getExternalStorageDirectory();
+        }
+      } else {
+        outputDir = await getApplicationDocumentsDirectory();
+      }
 
       if (isEncrypt) {
+        final iv = enc.IV.fromSecureRandom(16);
         final encrypted = encrypter.encryptBytes(bytes, iv: iv);
         processedData = iv.bytes + encrypted.bytes;
         newFileName = "LOCKED_${_selectedFileName}.enc";
@@ -106,132 +127,135 @@ class _LockerHomePageState extends State<LockerHomePage> {
           enc.Encrypted(Uint8List.fromList(fileData)),
           iv: enc.IV(Uint8List.fromList(ivBytes)),
         );
-        processedData = decrypted;
-        newFileName = _selectedFileName!.replaceAll("LOCKED", "").replaceAll(".enc", "");
+        processedData = Uint8List.fromList(decrypted);
+        newFileName = selectedFileName!.replaceAll("LOCKED", "").replaceAll(".enc", "");
         if (!newFileName.contains('.')) newFileName = "UNLOCKED_$newFileName";
       }
 
-      final outputFile = File('${outputDir.path}/$newFileName');
+      final outputFile = File('${outputDir!.path}/$newFileName');
       await outputFile.writeAsBytes(processedData);
 
       setState(() {
         _lastSavedFilePath = outputFile.path;
+        _isLoading = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isEncrypt ? 'ഫയൽ എൻക്രിപ്റ്റ് ചെയ്തു Downloads-ൽ സേവ് ചെയ്തു!' : 'ഫയൽ ഡീക്രിപ്റ്റ് ചെയ്തു Downloads-ൽ സേവ് ചെയ്തു!',
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _showSnackBar(isEncrypt ? 'ഫയൽ എൻക്രിപ്റ്റ് ചെയ്തു Downloads-ൽ സേവ് ചെയ്തു!' : 'ഫയൽ ഡീക്രിപ്റ്റ് ചെയ്തു വിജയകരമായി സേവ് ചെയ്തു!');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('പ്രക്രിയ പരാജയപ്പെട്ടു! തെറ്റായ പാസ്‌വേഡ് ആയിരിക്കാം.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
       setState(() => _isLoading = false);
+      _showSnackBar('തെറ്റായ പാസ്‌വേഡ് അല്ലെങ്കിൽ ഫയൽ!');
     }
   }
 
   void _shareFile() {
     if (_lastSavedFilePath != null) {
-      Share.shareXFiles([XFile(_lastSavedFilePath!)], text: 'ഇതാ ഞാൻ അയച്ച എൻക്രിപ്റ്റ് ചെയ്ത ഫയൽ!');
+      Share.shareXFiles([XFile(_lastSavedFilePath!)], text: 'Secure File Locker വഴി അയച്ചത്');
     }
+  }
+
+  void _showSnackBar(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('File Locker App', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF2F45C5),
+        title: const Text('Secure File Locker 🔐', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            ElevatedButton.icon(
-              onPressed: _pickFile,
-              icon: const Icon(Icons.attach_file),
-              label: Text(_selectedFileName ?? 'Select File to Lock/Unlock'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                foregroundColor: Colors.black87,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              child: Column(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _pickFile,
+                    icon: const Icon(Icons.folder_open),
+                    label: Text(
+                      _selectedFileName ?? 'Select File to Lock / Unlock',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.fingerprint, color: Color(0xFF6366F1)),
+                      labelText: 'Secret Password / PIN',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 25),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.lock_outline),
-                hintText: 'Password',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-            const SizedBox(height: 25),
+            const SizedBox(height: 24),
             if (_isLoading)
               const CircularProgressIndicator()
             else
               Row(
                 children: [
                   Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => _processFile(isEncrypt: true),
+                    child: ElevatedButton.icon(
+                      onPressed: () => _processFile(true),
+                      icon: const Icon(Icons.lock),
+                      label: const Text('ENCRYPT'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4CAF50),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text('ENCRYPT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  const SizedBox(width: 15),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => _processFile(isEncrypt: false),
+                    child: ElevatedButton.icon(
+                      onPressed: () => _processFile(false),
+                      icon: const Icon(Icons.lock_open),
+                      label: const Text('DECRYPT'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2196F3),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                        backgroundColor: const Color(0xFF6366F1),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text('DECRYPT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
               ),
-            const SizedBox(height: 35),
-            if (_lastSavedFilePath != null)
-              Container(
-                padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.green.shade200),
-                ),
-                child: Column(
-                  children: [
-                    const Text('ഫയൽ Downloads ഫോൾഡറിൽ സേവ് ആയിട്ടുണ്ട്!', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: _shareFile,
-                      icon: const Icon(Icons.share, color: Colors.white),
-                      label: const Text('Share File via WhatsApp', style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green.shade700,
-                        minimumSize: const Size(double.infinity, 45),
-                      ),
-                    ),
-                  ],
+            if (_lastSavedFilePath != null) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _shareFile,
+                icon: const Icon(Icons.share),
+                label: const Text('Share File via WhatsApp'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF25D366),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(50),
                 ),
               ),
+            ],
           ],
         ),
       ),
