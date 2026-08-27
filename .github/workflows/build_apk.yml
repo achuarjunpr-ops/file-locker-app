@@ -26,9 +26,11 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create Android Template & Configure SDK
+      - name: Create Android Template & Configure Build
         run: |
           flutter create . --platforms=android --org com.example
+
+          # 1. CompileSDK 36 All Subprojects
           cat << 'EOF' >> android/build.gradle
 
           subprojects {
@@ -41,6 +43,37 @@ jobs:
               }
           }
           EOF
+
+          # 2. Fix Release Signing & Disable Minification Crash
+          if [ -f android/app/build.gradle ]; then
+            cat << 'EOF' >> android/app/build.gradle
+
+          android {
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.debug
+                      minifyEnabled false
+                      shrinkResources false
+                  }
+              }
+          }
+          EOF
+          fi
+
+          if [ -f android/app/build.gradle.kts ]; then
+            cat << 'EOF' >> android/app/build.gradle.kts
+
+          android {
+              buildTypes {
+                  getByName("release") {
+                      signingConfig = signingConfigs.getByName("debug")
+                      isMinifyEnabled = false
+                      isShrinkResources = false
+                  }
+              }
+          }
+          EOF
+          fi
 
       - name: Configure AdMob in AndroidManifest
         run: |
@@ -98,7 +131,6 @@ jobs:
           # Collect generated APKs
           mkdir -p apk_output
           find . -name "*.apk" -exec cp {} apk_output/ \;
-          ls -la apk_output/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
