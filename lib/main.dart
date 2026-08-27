@@ -6,8 +6,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:encrypt/encrypt.dart' as enc;
 import 'package:share_plus/share_plus.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  MobileAds.instance.initialize(); // AdMob Initialize ചെയ്യുന്നു
   runApp(const FileLockerApp());
 }
 
@@ -46,6 +49,41 @@ class _LockerScreenState extends State<LockerScreen> {
   String? _lastSavedFilePath;
   bool _isLoading = false;
   bool _useBiometric = false;
+
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBannerAd(); // ആപ്പ് ഓപ്പൺ ആകുമ്പോൾ ആഡ് ലോഡ് ചെയ്യും
+  }
+
+  void _loadBannerAd() {
+    _bannerAd = BannerAd(
+      adUnitId: 'ca-app-pub-3940256099942544/6300978111', // Google-ന്റെ ഒഫീഷ്യൽ ടെസ്റ്റ് ആഡ് ഐഡി
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        },
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+        },
+      ),
+    );
+    _bannerAd?.load();
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   Future<bool> _authenticateUser() async {
     if (!_useBiometric) return true;
@@ -130,7 +168,7 @@ class _LockerScreenState extends State<LockerScreen> {
           iv: enc.IV(Uint8List.fromList(ivBytes)),
         );
         processedData = Uint8List.fromList(decrypted);
-        newFileName = _selectedFileName!.replaceAll("LOCKED", "").replaceAll(".enc", "");
+        newFileName = selectedFileName!.replaceAll("LOCKED", "").replaceAll(".enc", "");
         if (!newFileName.contains('.')) newFileName = "UNLOCKED_$newFileName";
       }
 
@@ -274,6 +312,14 @@ class _LockerScreenState extends State<LockerScreen> {
           ],
         ),
       ),
+      // താഴെയായി ബാനർ ആഡ് കാണിക്കുന്ന ഭാഗം
+      bottomNavigationBar: _isBannerAdLoaded && _bannerAd != null
+          ? SizedBox(
+              height: _bannerAd!.size.height.toDouble(),
+              width: _bannerAd!.size.width.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            )
+          : const SizedBox.shrink(),
     );
   }
 }
