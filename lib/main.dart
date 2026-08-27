@@ -41,14 +41,14 @@ class LockerScreen extends StatefulWidget {
 class _LockerScreenState extends State<LockerScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final LocalAuthentication auth = LocalAuthentication();
-  String? _selectedFilePath;
-  String? _selectedFileName;
-  String? _lastSavedFilePath;
-  bool _isLoading = false;
-  bool _useBiometric = false;
+  String? selectedFilePath;
+  String? selectedFileName;
+  String? lastSavedFilePath;
+  bool isLoading = false;
+  bool useBiometric = false;
 
   Future<bool> _authenticateUser() async {
-    if (!_useBiometric) return true;
+    if (!useBiometric) return true;
 
     try {
       final bool canAuthenticate = await auth.canCheckBiometrics || await auth.isDeviceSupported();
@@ -70,15 +70,15 @@ class _LockerScreenState extends State<LockerScreen> {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
     if (result != null && result.files.single.path != null) {
       setState(() {
-        _selectedFilePath = result.files.single.path!;
-        _selectedFileName = result.files.single.name;
-        _lastSavedFilePath = null;
+        selectedFilePath = result.files.single.path!;
+        selectedFileName = result.files.single.name;
+        lastSavedFilePath = null;
       });
     }
   }
 
   Future<void> _processFile(bool isEncrypt) async {
-    if (_selectedFilePath == null) {
+    if (selectedFilePath == null) {
       _showSnackBar('ആദ്യം ഒരു ഫയൽ തിരഞ്ഞെടുക്കുക!');
       return;
     }
@@ -94,14 +94,14 @@ class _LockerScreenState extends State<LockerScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() => isLoading = true);
 
     try {
       final keyString = _passwordController.text.padRight(32, '*').substring(0, 32);
       final key = enc.Key.fromUtf8(keyString);
       final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
 
-      final file = File(_selectedFilePath!);
+      final file = File(selectedFilePath!);
       final bytes = await file.readAsBytes();
 
       Uint8List processedData;
@@ -121,7 +121,7 @@ class _LockerScreenState extends State<LockerScreen> {
         final iv = enc.IV.fromSecureRandom(16);
         final encrypted = encrypter.encryptBytes(bytes, iv: iv);
         processedData = Uint8List.fromList(iv.bytes + encrypted.bytes);
-        newFileName = "LOCKED_${_selectedFileName}.enc";
+        newFileName = "LOCKED_${selectedFileName}.enc";
       } else {
         final ivBytes = bytes.sublist(0, 16);
         final fileData = bytes.sublist(16);
@@ -130,7 +130,7 @@ class _LockerScreenState extends State<LockerScreen> {
           iv: enc.IV(Uint8List.fromList(ivBytes)),
         );
         processedData = Uint8List.fromList(decrypted);
-        newFileName = selectedFileName!.replaceAll("LOCKED", "").replaceAll(".enc", "");
+        newFileName = _selectedFileName!.replaceAll("LOCKED_", "").replaceAll(".enc", "");
         if (!newFileName.contains('.')) newFileName = "UNLOCKED_$newFileName";
       }
 
@@ -138,20 +138,20 @@ class _LockerScreenState extends State<LockerScreen> {
       await outputFile.writeAsBytes(processedData);
 
       setState(() {
-        _lastSavedFilePath = outputFile.path;
-        _isLoading = false;
+        lastSavedFilePath = outputFile.path;
+        isLoading = false;
       });
 
       _showSnackBar(isEncrypt ? 'ഫയൽ എൻക്രിപ്റ്റ് ചെയ്തു Downloads-ൽ സേവ് ചെയ്തു!' : 'ഫയൽ ഡീക്രിപ്റ്റ് ചെയ്തു സേവ് ചെയ്തു!');
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() => isLoading = false);
       _showSnackBar('തെറ്റായ പാസ്‌വേഡ് അല്ലെങ്കിൽ ഫയൽ!');
     }
   }
 
   void _shareFile() {
-    if (_lastSavedFilePath != null) {
-      Share.shareXFiles([XFile(_lastSavedFilePath!)], text: 'Secure File Locker വഴി അയച്ചത്');
+    if (lastSavedFilePath != null) {
+      Share.shareXFiles([XFile(lastSavedFilePath!)], text: 'Secure File Locker വഴി അയച്ചത്');
     }
   }
 
@@ -191,7 +191,7 @@ class _LockerScreenState extends State<LockerScreen> {
                     onPressed: _pickFile,
                     icon: const Icon(Icons.folder_open),
                     label: Text(
-                      _selectedFileName ?? 'Select File to Lock / Unlock',
+                      selectedFileName ?? 'Select File to Lock / Unlock',
                       overflow: TextOverflow.ellipsis,
                     ),
                     style: OutlinedButton.styleFrom(
@@ -214,11 +214,11 @@ class _LockerScreenState extends State<LockerScreen> {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Use Fingerprint Security', style: TextStyle(fontSize: 14)),
                     secondary: const Icon(Icons.fingerprint, color: Color(0xFF6366F1)),
-                    value: _useBiometric,
+                    value: useBiometric,
                     activeColor: const Color(0xFF10B981),
                     onChanged: (bool value) {
                       setState(() {
-                        _useBiometric = value;
+                        useBiometric = value;
                       });
                     },
                   ),
@@ -226,7 +226,7 @@ class _LockerScreenState extends State<LockerScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            if (_isLoading)
+            if (isLoading)
               const CircularProgressIndicator()
             else
               Row(
@@ -258,7 +258,7 @@ class _LockerScreenState extends State<LockerScreen> {
                   ),
                 ],
               ),
-            if (_lastSavedFilePath != null) ...[
+            if (lastSavedFilePath != null) ...[
               const SizedBox(height: 24),
               ElevatedButton.icon(
                 onPressed: _shareFile,
