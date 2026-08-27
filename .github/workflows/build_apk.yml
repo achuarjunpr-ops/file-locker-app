@@ -26,9 +26,11 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create Android Template & Configure SDK
+      - name: Create Android Template & Configure SDK and Signing
         run: |
           flutter create . --platforms=android --org com.example
+
+          # 1. CompileSDK 36 All Subprojects
           cat << 'EOF' >> android/build.gradle
 
           subprojects {
@@ -42,6 +44,33 @@ jobs:
           }
           EOF
 
+          # 2. Add Debug Signing to Release Build
+          if [ -f android/app/build.gradle ]; then
+            cat << 'EOF' >> android/app/build.gradle
+
+          android {
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.debug
+                  }
+              }
+          }
+          EOF
+          fi
+
+          if [ -f android/app/build.gradle.kts ]; then
+            cat << 'EOF' >> android/app/build.gradle.kts
+
+          android {
+              buildTypes {
+                  getByName("release") {
+                      signingConfig = signingConfigs.getByName("debug")
+                  }
+              }
+          }
+          EOF
+          fi
+
       - name: Configure AdMob in AndroidManifest
         run: |
           sed -i '/<\/application>/i \        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"/>' android/app/src/main/AndroidManifest.xml
@@ -51,7 +80,7 @@ jobs:
 
       - name: Build APK
         run: |
-          for f in $(find /home/runner/.pub-cache/ -name "build.gradle" | grep "google_mobile_ads"); do
+          for f in $(find /home/runner/.pub-cache/ -name "build.gradle" | grep "google_mobile_ads.*/android/build.gradle"); do
             cat << 'EOF' > "$f"
           group 'io.flutter.plugins.googlemobileads'
           version '1.0-SNAPSHOT'
@@ -97,4 +126,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: FileLocker-Release-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/apk/release/*.apk
