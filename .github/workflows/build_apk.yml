@@ -86,6 +86,7 @@ jobs:
               implementation 'androidx.annotation:annotation:1.7.0'
               implementation 'androidx.lifecycle:lifecycle-process:2.7.0'
               implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+              implementation 'com.google.errorprone:error_prone_annotations:2.26.1'
           }
           EOF
             echo "Successfully Patched $f"
