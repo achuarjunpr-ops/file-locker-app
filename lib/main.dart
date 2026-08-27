@@ -45,14 +45,17 @@ class _LockerScreenState extends State<LockerScreen> {
   String? _selectedFileName;
   String? _lastSavedFilePath;
   bool _isLoading = false;
+  bool _useBiometric = false; // Fingerprint On/Off switch
 
   Future<bool> _authenticateUser() async {
+    if (!_useBiometric) return true; // Switch ഓഫ് ആണെങ്കിൽ ഫിംഗർപ്രിന്റ് ചോദിക്കില്ല
+
     try {
       final bool canAuthenticate = await auth.canCheckBiometrics || await auth.isDeviceSupported();
       if (!canAuthenticate) return true;
 
       return await auth.authenticate(
-        localizedReason: 'Fingerprint വെരിഫൈ ചെയ്യുക',
+        localizedReason: 'Fingerprint verify ചെയ്യുക',
         options: const AuthenticationOptions(
           stickyAuth: true,
           biometricOnly: false,
@@ -139,7 +142,7 @@ class _LockerScreenState extends State<LockerScreen> {
         _isLoading = false;
       });
 
-      _showSnackBar(isEncrypt ? 'ഫയൽ എൻക്രിപ്റ്റ് ചെയ്തു Downloads-ൽ സേവ് ചെയ്തു!' : 'ഫയൽ ഡീക്രിപ്റ്റ് ചെയ്തു വിജയകരമായി സേവ് ചെയ്തു!');
+      _showSnackBar(isEncrypt ? 'ഫയൽ എൻക്രിപ്റ്റ് ചെയ്തു Downloads-ൽ സേവ് ചെയ്തു!' : 'ഫയൽ ഡീക്രിപ്റ്റ് ചെയ്തു സേവ് ചെയ്തു!');
     } catch (e) {
       setState(() => _isLoading = false);
       _showSnackBar('തെറ്റായ പാസ്‌വേഡ് അല്ലെങ്കിൽ ഫയൽ!');
@@ -201,10 +204,23 @@ class _LockerScreenState extends State<LockerScreen> {
                     controller: _passwordController,
                     obscureText: true,
                     decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.fingerprint, color: Color(0xFF6366F1)),
+                      prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF6366F1)),
                       labelText: 'Secret Password / PIN',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Use Fingerprint Security', style: TextStyle(fontSize: 14)),
+                    secondary: const Icon(Icons.fingerprint, color: Color(0xFF6366F1)),
+                    value: _useBiometric,
+                    activeColor: const Color(0xFF10B981),
+                    onChanged: (bool value) {
+                      setState(() {
+                        _useBiometric = value;
+                      });
+                    },
                   ),
                 ],
               ),
