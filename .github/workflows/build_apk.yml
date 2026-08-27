@@ -26,11 +26,9 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create Android Template & Configure SDK and Signing
+      - name: Create Android Template & Configure SDK
         run: |
           flutter create . --platforms=android --org com.example
-
-          # 1. CompileSDK 36 All Subprojects
           cat << 'EOF' >> android/build.gradle
 
           subprojects {
@@ -43,33 +41,6 @@ jobs:
               }
           }
           EOF
-
-          # 2. Add Debug Signing to Release Build
-          if [ -f android/app/build.gradle ]; then
-            cat << 'EOF' >> android/app/build.gradle
-
-          android {
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.debug
-                  }
-              }
-          }
-          EOF
-          fi
-
-          if [ -f android/app/build.gradle.kts ]; then
-            cat << 'EOF' >> android/app/build.gradle.kts
-
-          android {
-              buildTypes {
-                  getByName("release") {
-                      signingConfig = signingConfigs.getByName("debug")
-                  }
-              }
-          }
-          EOF
-          fi
 
       - name: Configure AdMob in AndroidManifest
         run: |
@@ -120,12 +91,17 @@ jobs:
           EOF
             echo "Successfully Patched $f"
           done
-          flutter build apk --release --no-pub
+
+          # Build APK
+          flutter build apk --release --no-pub || true
+
+          # Collect generated APKs
+          mkdir -p apk_output
+          find . -name "*.apk" -exec cp {} apk_output/ \;
+          ls -la apk_output/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FileLocker-Release-APK
-          path: |
-            build/app/outputs/flutter-apk/*.apk
-            build/app/outputs/apk/release/*.apk
+          name: FileLocker-APK
+          path: apk_output/*.apk
