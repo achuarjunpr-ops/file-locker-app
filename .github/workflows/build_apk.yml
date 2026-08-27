@@ -26,9 +26,21 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create Android Template
+      - name: Create Android Template & Configure SDK
         run: |
           flutter create . --platforms=android --org com.example
+          cat << 'EOF' >> android/build.gradle
+
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdkVersion 36
+                      }
+                  }
+              }
+          }
+          EOF
 
       - name: Configure AdMob in AndroidManifest
         run: |
@@ -58,7 +70,7 @@ jobs:
 
           android {
               namespace "io.flutter.plugins.googlemobileads"
-              compileSdk 34
+              compileSdk 36
 
               defaultConfig {
                   minSdkVersion 21
