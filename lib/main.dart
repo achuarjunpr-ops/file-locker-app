@@ -59,7 +59,7 @@ class _LockerScreenState extends State<LockerScreen> {
         ),
       );
     } catch (e) {
-      return true; // ഫിംഗർപ്രിന്റ് ലഭ്യമല്ലെങ്കിൽ പാസ്‌വേഡ് വഴി തുടരാം
+      return true;
     }
   }
 
@@ -85,7 +85,6 @@ class _LockerScreenState extends State<LockerScreen> {
       return;
     }
 
-    // Biometric Authentication
     bool authenticated = await _authenticateUser();
     if (!authenticated) {
       _showSnackBar('Authentication പരാജയപ്പെട്ടു!');
@@ -118,7 +117,7 @@ class _LockerScreenState extends State<LockerScreen> {
       if (isEncrypt) {
         final iv = enc.IV.fromSecureRandom(16);
         final encrypted = encrypter.encryptBytes(bytes, iv: iv);
-        processedData = iv.bytes + encrypted.bytes;
+        processedData = Uint8List.fromList(iv.bytes + encrypted.bytes);
         newFileName = "LOCKED_${_selectedFileName}.enc";
       } else {
         final ivBytes = bytes.sublist(0, 16);
