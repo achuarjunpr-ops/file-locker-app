@@ -37,10 +37,10 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Fix google_mobile_ads Build Script
+      - name: Build APK
         run: |
-          find /home/runner/.pub-cache/hosted/ -name "build.gradle" -path "/google_mobile_ads/*" | while read -r file; do
-          cat << 'EOF' > "$file"
+          for f in $(find /home/runner/.pub-cache/ -name "build.gradle" | grep "google_mobile_ads"); do
+            cat << 'EOF' > "$f"
           group 'io.flutter.plugins.googlemobileads'
           version '1.0-SNAPSHOT'
 
@@ -75,11 +75,9 @@ jobs:
               implementation 'androidx.lifecycle:lifecycle-process:2.7.0'
           }
           EOF
-            echo "Patched $file successfully"
+            echo "Successfully Patched $f"
           done
-
-      - name: Build APK
-        run: flutter build apk --release
+          flutter build apk --release --no-pub
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
