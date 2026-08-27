@@ -37,34 +37,46 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Patch google_mobile_ads Gradle Bug
+      - name: Fix google_mobile_ads Build Script
         run: |
-          python3 -c "
-          import glob
-          for filepath in glob.glob('/home/runner/.pub-cache/hosted/*/google_mobile_ads/android/build.gradle', recursive=True):
-              with open(filepath, 'r') as f:
-                  lines = f.readlines()
-              new_lines = []
-              inside_block = False
-              brace_count = 0
-              for line in lines:
-                  if 'configurations.all' in line and not inside_block:
-                      inside_block = True
-                      brace_count += line.count('{') - line.count('}')
-                      new_lines.append('// [PATCHED] ' + line)
-                      if brace_count <= 0:
-                          inside_block = False
-                  elif inside_block:
-                      brace_count += line.count('{') - line.count('}')
-                      new_lines.append('// [PATCHED] ' + line)
-                      if brace_count <= 0:
-                          inside_block = False
-                  else:
-                      new_lines.append(line)
-              with open(filepath, 'w') as f:
-                  f.writelines(new_lines)
-              print(f'Successfully patched {filepath}')
-          "
+          find /home/runner/.pub-cache/hosted/ -name "build.gradle" -path "/google_mobile_ads/*" | while read -r file; do
+          cat << 'EOF' > "$file"
+          group 'io.flutter.plugins.googlemobileads'
+          version '1.0-SNAPSHOT'
+
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.0'
+              }
+          }
+
+          apply plugin: 'com.android.library'
+
+          android {
+              namespace "io.flutter.plugins.googlemobileads"
+              compileSdk 34
+
+              defaultConfig {
+                  minSdkVersion 21
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+          }
+
+          dependencies {
+              implementation 'com.google.android.gms:play-services-ads:23.0.0'
+              implementation 'androidx.annotation:annotation:1.7.0'
+              implementation 'androidx.lifecycle:lifecycle-process:2.7.0'
+          }
+          EOF
+            echo "Patched $file successfully"
+          done
 
       - name: Build APK
         run: flutter build apk --release
