@@ -168,7 +168,7 @@ class _LockerScreenState extends State<LockerScreen> {
           iv: enc.IV(Uint8List.fromList(ivBytes)),
         );
         processedData = Uint8List.fromList(decrypted);
-        newFileName = selectedFileName!.replaceAll("LOCKED", "").replaceAll(".enc", "");
+        newFileName = _selectedFileName!.replaceAll("LOCKED", "").replaceAll(".enc", "");
         if (!newFileName.contains('.')) newFileName = "UNLOCKED_$newFileName";
       }
 
