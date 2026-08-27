@@ -45,10 +45,10 @@ class _LockerScreenState extends State<LockerScreen> {
   String? _selectedFileName;
   String? _lastSavedFilePath;
   bool _isLoading = false;
-  bool _useBiometric = false; // Fingerprint On/Off switch
+  bool _useBiometric = false;
 
   Future<bool> _authenticateUser() async {
-    if (!_useBiometric) return true; // Switch ഓഫ് ആണെങ്കിൽ ഫിംഗർപ്രിന്റ് ചോദിക്കില്ല
+    if (!_useBiometric) return true;
 
     try {
       final bool canAuthenticate = await auth.canCheckBiometrics || await auth.isDeviceSupported();
